@@ -2936,6 +2936,32 @@ void ath9k_hw_enable_rxfilter(struct ath_hw *ah, u32 bits)
 }
 EXPORT_SYMBOL(ath9k_hw_enable_rxfilter);
 
+/*
+ * Turn bits off in the RX filter, the exact counterpart of
+ * ath9k_hw_enable_rxfilter(): the read-modify-write happens in the device, so
+ * no host read is involved. Clear every bit that enable sets, including
+ * AR_RXCFG_ZLFDMA - it is what makes the device DMA a zero-length frame for a
+ * PHY error, so leaving it set keeps the frames flowing after the PHY error
+ * mask is gone. ath9k_hw_setrxfilter() would clear it on the same condition,
+ * but ath9k_htc never calls that on a spectral mode change.
+ */
+void ath9k_hw_disable_rxfilter(struct ath_hw *ah, u32 bits)
+{
+	u32 phybits = 0;
+
+	if (bits & ATH9K_RX_FILTER_PHYRADAR)
+		phybits |= AR_PHY_ERR_RADAR;
+	if (bits & ATH9K_RX_FILTER_PHYERR)
+		phybits |= AR_PHY_ERR_OFDM_TIMING | AR_PHY_ERR_CCK_TIMING;
+
+	REG_CLR_BIT(ah, AR_RX_FILTER, bits);
+	if (phybits) {
+		REG_CLR_BIT(ah, AR_PHY_ERR, phybits);
+		REG_CLR_BIT(ah, AR_RXCFG, AR_RXCFG_ZLFDMA);
+	}
+}
+EXPORT_SYMBOL(ath9k_hw_disable_rxfilter);
+
 bool ath9k_hw_phy_disable(struct ath_hw *ah)
 {
 	if (ath9k_hw_mci_is_enabled(ah))
